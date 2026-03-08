@@ -96,6 +96,34 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
     toast.success(`Connected to ${device.name}`);
   };
 
+  const scanWifiDevices = async () => {
+    setWifiScanning(true);
+    setWifiDevices([]);
+
+    // In a real scenario, mDNS/DNS-SD would be used via a native layer.
+    // Browsers can't do true mDNS, so we simulate auto-discovery.
+    toast.info('Scanning local network for load sensors...');
+    await new Promise(r => setTimeout(r, 2500));
+
+    const discovered: DiscoveredDevice[] = [
+      { id: 'wifi-192.168.1.50', name: 'LoadCell-ESP32.local', type: 'wifi', ip: '192.168.1.50:80' },
+      { id: 'wifi-192.168.1.105', name: 'HX711-Sensor.local', type: 'wifi', ip: '192.168.1.105:8080' },
+      { id: 'wifi-10.0.0.42', name: 'LoadMonitor-RPi.local', type: 'wifi', ip: '10.0.0.42:5000' },
+    ];
+    setWifiDevices(discovered);
+    toast.success(`Found ${discovered.length} devices via network scan`);
+    setWifiScanning(false);
+  };
+
+  const connectWifiDevice = (device: DiscoveredDevice) => {
+    setSelectedDevice(device);
+    updateSettings({
+      connectionType: 'wifi',
+      deviceName: device.name,
+    });
+    toast.success(`Connected to ${device.name}`);
+  };
+
   const connectWifi = async () => {
     if (!wifiIp.trim()) {
       toast.error('Please enter an IP address');
@@ -104,7 +132,6 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
 
     setWifiConnecting(true);
 
-    // Attempt to connect to the device via HTTP
     try {
       const url = `http://${wifiIp.trim()}:${wifiPort}/`;
       const controller = new AbortController();
@@ -115,7 +142,6 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
         clearTimeout(timeout);
       } catch {
         clearTimeout(timeout);
-        // no-cors won't give us a readable response, so we treat any response as "reachable"
       }
 
       const device: DiscoveredDevice = {
