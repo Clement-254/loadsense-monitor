@@ -32,6 +32,8 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
   const [wifiIp, setWifiIp] = useState('');
   const [wifiPort, setWifiPort] = useState('80');
   const [wifiConnecting, setWifiConnecting] = useState(false);
+  const [wifiScanning, setWifiScanning] = useState(false);
+  const [wifiDevices, setWifiDevices] = useState<DiscoveredDevice[]>([]);
   const [expandedType, setExpandedType] = useState<ConnectionType | null>(null);
 
   const handleSelectConnection = (id: ConnectionType) => {
