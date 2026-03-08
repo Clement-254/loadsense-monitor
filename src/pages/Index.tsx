@@ -27,7 +27,7 @@ function AppContent() {
     });
   }, [addReading]);
 
-  const { isRunning, start, stop } = useSimulator(settings, handleReading);
+  const { isRunning, start, stop } = useSensorDataSource(settings, handleReading);
 
   const latestReading = liveData.length > 0 ? liveData[liveData.length - 1] : null;
 
