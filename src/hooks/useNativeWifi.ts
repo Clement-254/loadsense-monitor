@@ -25,10 +25,7 @@ export function useNativeWifi() {
       try {
         const { CapacitorWifi } = await import('@capgo/capacitor-wifi');
 
-        // Trigger a scan
-        await CapacitorWifi.scan();
-
-        // Get available networks from the scan
+        // Get available networks (the plugin handles scanning internally)
         const result = await CapacitorWifi.getAvailableNetworks();
 
         const discovered: WifiNetwork[] = (result.networks || []).map((network: any, index: number) => ({
