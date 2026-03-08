@@ -52,7 +52,7 @@ export function exportPDF(report: ReportData, unit: string) {
   const doc = new jsPDF();
 
   doc.setFontSize(20);
-  doc.text('LoadSense Monitor Report', 14, 22);
+  doc.text('SLMRS Report', 14, 22);
 
   doc.setFontSize(10);
   doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 30);
