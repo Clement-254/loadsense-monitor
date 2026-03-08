@@ -1,22 +1,17 @@
 import { useState } from 'react';
 import { AppSettings, ConnectionType } from '@/types/sensor';
-import { Wifi, Bluetooth, Cpu, CheckCircle2, Search, Loader2, AlertCircle, X } from 'lucide-react';
+import { Wifi, Bluetooth, Cpu, CheckCircle2, Search, Loader2, AlertCircle, X, Signal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
+import { useNativeBluetooth, DiscoveredDevice } from '@/hooks/useNativeBluetooth';
+import { useNativeWifi, WifiNetwork } from '@/hooks/useNativeWifi';
+import { isNativePlatform } from '@/lib/nativeCapabilities';
 
 interface Props {
   settings: AppSettings;
   updateSettings: (partial: Partial<AppSettings>) => void;
   isRunning: boolean;
-}
-
-interface DiscoveredDevice {
-  id: string;
-  name: string;
-  type: 'bluetooth' | 'wifi';
-  rssi?: number;
-  ip?: string;
 }
 
 const connections: { id: ConnectionType; label: string; description: string; icon: React.ReactNode }[] = [
@@ -25,16 +20,23 @@ const connections: { id: ConnectionType; label: string; description: string; ico
   { id: 'wifi', label: 'WiFi / HTTP', description: 'Connect via network IP address', icon: <Wifi size={20} /> },
 ];
 
+function getRssiLabel(rssi?: number) {
+  if (rssi === undefined) return null;
+  if (rssi >= -50) return 'Excellent';
+  if (rssi >= -60) return 'Good';
+  if (rssi >= -70) return 'Fair';
+  return 'Weak';
+}
+
 export default function DeviceScreen({ settings, updateSettings, isRunning }: Props) {
-  const [scanning, setScanning] = useState(false);
-  const [bluetoothDevices, setBluetoothDevices] = useState<DiscoveredDevice[]>([]);
-  const [selectedDevice, setSelectedDevice] = useState<DiscoveredDevice | null>(null);
+  const [selectedDevice, setSelectedDevice] = useState<DiscoveredDevice | WifiNetwork | null>(null);
   const [wifiIp, setWifiIp] = useState('');
   const [wifiPort, setWifiPort] = useState('80');
   const [wifiConnecting, setWifiConnecting] = useState(false);
-  const [wifiScanning, setWifiScanning] = useState(false);
-  const [wifiDevices, setWifiDevices] = useState<DiscoveredDevice[]>([]);
   const [expandedType, setExpandedType] = useState<ConnectionType | null>(null);
+
+  const bluetooth = useNativeBluetooth();
+  const wifi = useNativeWifi();
 
   const handleSelectConnection = (id: ConnectionType) => {
     if (isRunning) return;
@@ -47,119 +49,33 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
     }
   };
 
-  const scanBluetooth = async () => {
-    setScanning(true);
-    setBluetoothDevices([]);
-
-    // Check if Web Bluetooth API is available
-    if ('bluetooth' in navigator) {
-      try {
-        const device = await (navigator as any).bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: ['generic_access', 'battery_service'],
-        });
-
-        const discovered: DiscoveredDevice = {
-          id: device.id,
-          name: device.name || 'Unknown Device',
-          type: 'bluetooth',
-        };
-        setBluetoothDevices(prev => [...prev, discovered]);
-        toast.success(`Found: ${discovered.name}`);
-      } catch (err: any) {
-        if (err.name !== 'NotFoundError') {
-          toast.error('Bluetooth scan failed: ' + (err.message || 'Unknown error'));
-        }
-      }
-    } else {
-      // Simulate finding devices for demo
-      toast.info('Web Bluetooth not available — showing simulated devices');
-      await new Promise(r => setTimeout(r, 2000));
-      const simulated: DiscoveredDevice[] = [
-        { id: 'bt-esp32-001', name: 'LoadCell-ESP32', type: 'bluetooth', rssi: -45 },
-        { id: 'bt-esp32-002', name: 'ESP32-LoadSensor', type: 'bluetooth', rssi: -62 },
-        { id: 'bt-arduino-001', name: 'Arduino-HX711', type: 'bluetooth', rssi: -78 },
-      ];
-      setBluetoothDevices(simulated);
-      toast.success(`Found ${simulated.length} devices`);
-    }
-
-    setScanning(false);
-  };
-
   const connectBluetoothDevice = (device: DiscoveredDevice) => {
     setSelectedDevice(device);
-    updateSettings({
-      connectionType: 'bluetooth',
-      deviceName: device.name,
-    });
+    updateSettings({ connectionType: 'bluetooth', deviceName: device.name });
     toast.success(`Connected to ${device.name}`);
   };
 
-  const scanWifiDevices = async () => {
-    setWifiScanning(true);
-    setWifiDevices([]);
-
-    // In a real scenario, mDNS/DNS-SD would be used via a native layer.
-    // Browsers can't do true mDNS, so we simulate auto-discovery.
-    toast.info('Scanning local network for load sensors...');
-    await new Promise(r => setTimeout(r, 2500));
-
-    const discovered: DiscoveredDevice[] = [
-      { id: 'wifi-192.168.1.50', name: 'LoadCell-ESP32.local', type: 'wifi', ip: '192.168.1.50:80' },
-      { id: 'wifi-192.168.1.105', name: 'HX711-Sensor.local', type: 'wifi', ip: '192.168.1.105:8080' },
-      { id: 'wifi-10.0.0.42', name: 'LoadMonitor-RPi.local', type: 'wifi', ip: '10.0.0.42:5000' },
-    ];
-    setWifiDevices(discovered);
-    toast.success(`Found ${discovered.length} devices via network scan`);
-    setWifiScanning(false);
-  };
-
-  const connectWifiDevice = (device: DiscoveredDevice) => {
+  const connectWifiDevice = (device: WifiNetwork) => {
     setSelectedDevice(device);
-    updateSettings({
-      connectionType: 'wifi',
-      deviceName: device.name,
-    });
+    updateSettings({ connectionType: 'wifi', deviceName: device.name });
     toast.success(`Connected to ${device.name}`);
   };
 
   const connectWifi = async () => {
-    if (!wifiIp.trim()) {
-      toast.error('Please enter an IP address');
-      return;
-    }
-
+    if (!wifiIp.trim()) { toast.error('Please enter an IP address'); return; }
     setWifiConnecting(true);
-
     try {
       const url = `http://${wifiIp.trim()}:${wifiPort}/`;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
+      try { await fetch(url, { signal: controller.signal, mode: 'no-cors' }); clearTimeout(timeout); }
+      catch { clearTimeout(timeout); }
 
-      try {
-        await fetch(url, { signal: controller.signal, mode: 'no-cors' });
-        clearTimeout(timeout);
-      } catch {
-        clearTimeout(timeout);
-      }
-
-      const device: DiscoveredDevice = {
-        id: `wifi-${wifiIp}`,
-        name: `Device@${wifiIp}:${wifiPort}`,
-        type: 'wifi',
-        ip: `${wifiIp}:${wifiPort}`,
-      };
+      const device: WifiNetwork = { id: `wifi-${wifiIp}`, name: `Device@${wifiIp}:${wifiPort}`, type: 'wifi', ip: `${wifiIp}:${wifiPort}` };
       setSelectedDevice(device);
-      updateSettings({
-        connectionType: 'wifi',
-        deviceName: device.name,
-      });
+      updateSettings({ connectionType: 'wifi', deviceName: device.name });
       toast.success(`Connected to ${wifiIp}:${wifiPort}`);
-    } catch {
-      toast.error('Connection failed. Check IP and port.');
-    }
-
+    } catch { toast.error('Connection failed. Check IP and port.'); }
     setWifiConnecting(false);
   };
 
@@ -174,7 +90,10 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
     <div className="p-4 space-y-4 max-w-lg mx-auto">
       <div>
         <h1 className="text-lg font-bold text-foreground">Device Connection</h1>
-        <p className="text-xs text-muted-foreground">Select data source for monitoring</p>
+        <p className="text-xs text-muted-foreground">
+          Select data source for monitoring
+          {isNativePlatform() && <span className="ml-1 text-primary">(Native mode)</span>}
+        </p>
       </div>
 
       {/* Connected Device Banner */}
@@ -185,13 +104,7 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
             <p className="text-sm font-medium text-foreground truncate">{selectedDevice.name}</p>
             <p className="text-xs text-muted-foreground capitalize">{selectedDevice.type} connection</p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={disconnectDevice}
-            disabled={isRunning}
-            className="shrink-0 h-8 w-8"
-          >
+          <Button variant="ghost" size="icon" onClick={disconnectDevice} disabled={isRunning} className="shrink-0 h-8 w-8">
             <X size={16} />
           </Button>
         </div>
@@ -208,9 +121,7 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
                 disabled={isRunning}
                 onClick={() => handleSelectConnection(conn.id)}
                 className={`w-full flex items-center gap-4 p-4 rounded-xl border transition-all text-left ${
-                  selected
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border bg-card hover:border-primary/50'
+                  selected ? 'border-primary bg-primary/5' : 'border-border bg-card hover:border-primary/50'
                 }`}
               >
                 <div className={`p-2 rounded-lg ${selected ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
@@ -221,9 +132,7 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
                   <p className="text-xs text-muted-foreground">{conn.description}</p>
                 </div>
                 {selected && <CheckCircle2 size={20} className="text-primary" />}
-                {conn.id !== 'simulated' && !selected && (
-                  <Search size={18} className="text-muted-foreground" />
-                )}
+                {conn.id !== 'simulated' && !selected && <Search size={18} className="text-muted-foreground" />}
               </button>
 
               {/* Bluetooth Scan Panel */}
@@ -231,33 +140,27 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
                 <div className="bg-card border border-border rounded-xl p-4 space-y-3 ml-2">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Bluetooth Devices</p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={scanBluetooth}
-                      disabled={scanning}
-                      className="h-8 text-xs"
-                    >
-                      {scanning ? <Loader2 size={14} className="animate-spin mr-1" /> : <Search size={14} className="mr-1" />}
-                      {scanning ? 'Scanning...' : 'Scan'}
+                    <Button size="sm" variant="outline" onClick={bluetooth.scan} disabled={bluetooth.scanning} className="h-8 text-xs">
+                      {bluetooth.scanning ? <Loader2 size={14} className="animate-spin mr-1" /> : <Search size={14} className="mr-1" />}
+                      {bluetooth.scanning ? 'Scanning...' : 'Scan'}
                     </Button>
                   </div>
 
-                  {bluetoothDevices.length === 0 && !scanning && (
+                  {bluetooth.devices.length === 0 && !bluetooth.scanning && (
                     <div className="flex flex-col items-center py-6 text-center">
                       <Bluetooth size={32} className="text-muted-foreground/40 mb-2" />
                       <p className="text-xs text-muted-foreground">Tap "Scan" to search for nearby Bluetooth devices</p>
                     </div>
                   )}
 
-                  {scanning && bluetoothDevices.length === 0 && (
+                  {bluetooth.scanning && bluetooth.devices.length === 0 && (
                     <div className="flex flex-col items-center py-6">
                       <Loader2 size={28} className="text-primary animate-spin mb-2" />
                       <p className="text-xs text-muted-foreground">Searching for devices...</p>
                     </div>
                   )}
 
-                  {bluetoothDevices.map(device => (
+                  {bluetooth.devices.map(device => (
                     <button
                       key={device.id}
                       onClick={() => connectBluetoothDevice(device)}
@@ -268,8 +171,11 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
                         <p className="text-sm font-medium text-foreground truncate">{device.name}</p>
                         <p className="text-xs text-muted-foreground font-mono">{device.id}</p>
                       </div>
-                      {device.rssi && (
-                        <span className="text-xs text-muted-foreground font-mono">{device.rssi} dBm</span>
+                      {device.rssi !== undefined && (
+                        <div className="text-right shrink-0">
+                          <p className="text-xs text-muted-foreground font-mono">{device.rssi} dBm</p>
+                          <p className="text-[10px] text-muted-foreground">{getRssiLabel(device.rssi)}</p>
+                        </div>
                       )}
                     </button>
                   ))}
@@ -281,44 +187,49 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
                 <div className="bg-card border border-border rounded-xl p-4 space-y-3 ml-2">
                   {/* Auto-Discovery Section */}
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Network Discovery (mDNS)</p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={scanWifiDevices}
-                      disabled={wifiScanning}
-                      className="h-8 text-xs"
-                    >
-                      {wifiScanning ? <Loader2 size={14} className="animate-spin mr-1" /> : <Search size={14} className="mr-1" />}
-                      {wifiScanning ? 'Scanning...' : 'Scan Network'}
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      {isNativePlatform() ? 'WiFi Networks' : 'Network Discovery'}
+                    </p>
+                    <Button size="sm" variant="outline" onClick={wifi.scan} disabled={wifi.scanning} className="h-8 text-xs">
+                      {wifi.scanning ? <Loader2 size={14} className="animate-spin mr-1" /> : <Search size={14} className="mr-1" />}
+                      {wifi.scanning ? 'Scanning...' : 'Scan Network'}
                     </Button>
                   </div>
 
-                  {wifiDevices.length === 0 && !wifiScanning && (
+                  {wifi.networks.length === 0 && !wifi.scanning && (
                     <div className="flex flex-col items-center py-4 text-center">
                       <Wifi size={28} className="text-muted-foreground/40 mb-2" />
-                      <p className="text-xs text-muted-foreground">Tap "Scan Network" to auto-discover devices</p>
+                      <p className="text-xs text-muted-foreground">Tap "Scan Network" to discover available WiFi networks</p>
                     </div>
                   )}
 
-                  {wifiScanning && wifiDevices.length === 0 && (
+                  {wifi.scanning && wifi.networks.length === 0 && (
                     <div className="flex flex-col items-center py-4">
                       <Loader2 size={24} className="text-primary animate-spin mb-2" />
-                      <p className="text-xs text-muted-foreground">Scanning local network...</p>
+                      <p className="text-xs text-muted-foreground">Scanning for WiFi networks...</p>
                     </div>
                   )}
 
-                  {wifiDevices.map(device => (
+                  {wifi.networks.map(network => (
                     <button
-                      key={device.id}
-                      onClick={() => connectWifiDevice(device)}
+                      key={network.id}
+                      onClick={() => connectWifiDevice(network)}
                       className="w-full flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30 hover:bg-primary/5 hover:border-primary/50 transition-all text-left"
                     >
                       <Wifi size={16} className="text-primary shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{device.name}</p>
-                        <p className="text-xs text-muted-foreground font-mono">{device.ip}</p>
+                        <p className="text-sm font-medium text-foreground truncate">{network.name}</p>
+                        <p className="text-xs text-muted-foreground font-mono">
+                          {network.ip || network.ssid || 'WiFi Network'}
+                          {network.frequency ? ` · ${network.frequency >= 5000 ? '5 GHz' : '2.4 GHz'}` : ''}
+                        </p>
                       </div>
+                      {network.rssi !== undefined && (
+                        <div className="text-right shrink-0">
+                          <Signal size={14} className="text-muted-foreground" />
+                          <p className="text-[10px] text-muted-foreground">{getRssiLabel(network.rssi)}</p>
+                        </div>
+                      )}
                     </button>
                   ))}
 
@@ -334,22 +245,12 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
 
                   <div className="space-y-2">
                     <label className="text-xs text-muted-foreground">Device IP Address</label>
-                    <Input
-                      placeholder="192.168.1.100"
-                      value={wifiIp}
-                      onChange={e => setWifiIp(e.target.value)}
-                      className="h-9 text-sm font-mono"
-                    />
+                    <Input placeholder="192.168.1.100" value={wifiIp} onChange={e => setWifiIp(e.target.value)} className="h-9 text-sm font-mono" />
                   </div>
 
                   <div className="space-y-2">
                     <label className="text-xs text-muted-foreground">Port</label>
-                    <Input
-                      placeholder="80"
-                      value={wifiPort}
-                      onChange={e => setWifiPort(e.target.value)}
-                      className="h-9 text-sm font-mono"
-                    />
+                    <Input placeholder="80" value={wifiPort} onChange={e => setWifiPort(e.target.value)} className="h-9 text-sm font-mono" />
                   </div>
 
                   <div className="flex items-start gap-2 p-2 rounded-lg bg-muted/50">
@@ -359,11 +260,7 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
                     </p>
                   </div>
 
-                  <Button
-                    onClick={connectWifi}
-                    disabled={wifiConnecting || !wifiIp.trim()}
-                    className="w-full h-9 text-sm"
-                  >
+                  <Button onClick={connectWifi} disabled={wifiConnecting || !wifiIp.trim()} className="w-full h-9 text-sm">
                     {wifiConnecting ? <Loader2 size={14} className="animate-spin mr-2" /> : <Wifi size={14} className="mr-2" />}
                     {wifiConnecting ? 'Connecting...' : 'Connect Manually'}
                   </Button>
@@ -396,6 +293,10 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Connection</span>
           <span className="font-mono text-foreground capitalize">{settings.connectionType}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Platform</span>
+          <span className="font-mono text-foreground">{isNativePlatform() ? 'Native' : 'Web'}</span>
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Status</span>
