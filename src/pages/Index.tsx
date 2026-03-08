@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { SensorReading } from '@/types/sensor';
 import { useSettings } from '@/hooks/useSettings';
 import { useDataStore } from '@/hooks/useDataStore';
-import { useSimulator } from '@/hooks/useSimulator';
+import { useSensorDataSource } from '@/hooks/useSensorDataSource';
 import { ThemeProvider } from '@/hooks/useTheme';
 import Dashboard from '@/components/Dashboard';
 import HistoryScreen from '@/components/HistoryScreen';
@@ -27,7 +27,7 @@ function AppContent() {
     });
   }, [addReading]);
 
-  const { isRunning, start, stop } = useSimulator(settings, handleReading);
+  const { isRunning, start, stop } = useSensorDataSource(settings, handleReading);
 
   const latestReading = liveData.length > 0 ? liveData[liveData.length - 1] : null;
 
