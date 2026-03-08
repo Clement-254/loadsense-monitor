@@ -279,7 +279,58 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
               {/* WiFi Connection Panel */}
               {conn.id === 'wifi' && expanded && (
                 <div className="bg-card border border-border rounded-xl p-4 space-y-3 ml-2">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">WiFi Connection</p>
+                  {/* Auto-Discovery Section */}
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Network Discovery (mDNS)</p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={scanWifiDevices}
+                      disabled={wifiScanning}
+                      className="h-8 text-xs"
+                    >
+                      {wifiScanning ? <Loader2 size={14} className="animate-spin mr-1" /> : <Search size={14} className="mr-1" />}
+                      {wifiScanning ? 'Scanning...' : 'Scan Network'}
+                    </Button>
+                  </div>
+
+                  {wifiDevices.length === 0 && !wifiScanning && (
+                    <div className="flex flex-col items-center py-4 text-center">
+                      <Wifi size={28} className="text-muted-foreground/40 mb-2" />
+                      <p className="text-xs text-muted-foreground">Tap "Scan Network" to auto-discover devices</p>
+                    </div>
+                  )}
+
+                  {wifiScanning && wifiDevices.length === 0 && (
+                    <div className="flex flex-col items-center py-4">
+                      <Loader2 size={24} className="text-primary animate-spin mb-2" />
+                      <p className="text-xs text-muted-foreground">Scanning local network...</p>
+                    </div>
+                  )}
+
+                  {wifiDevices.map(device => (
+                    <button
+                      key={device.id}
+                      onClick={() => connectWifiDevice(device)}
+                      className="w-full flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30 hover:bg-primary/5 hover:border-primary/50 transition-all text-left"
+                    >
+                      <Wifi size={16} className="text-primary shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{device.name}</p>
+                        <p className="text-xs text-muted-foreground font-mono">{device.ip}</p>
+                      </div>
+                    </button>
+                  ))}
+
+                  {/* Manual Connection Divider */}
+                  <div className="relative py-1">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t border-border" />
+                    </div>
+                    <div className="relative flex justify-center text-xs">
+                      <span className="bg-card px-2 text-muted-foreground">or connect manually</span>
+                    </div>
+                  </div>
 
                   <div className="space-y-2">
                     <label className="text-xs text-muted-foreground">Device IP Address</label>
@@ -314,7 +365,7 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
                     className="w-full h-9 text-sm"
                   >
                     {wifiConnecting ? <Loader2 size={14} className="animate-spin mr-2" /> : <Wifi size={14} className="mr-2" />}
-                    {wifiConnecting ? 'Connecting...' : 'Connect'}
+                    {wifiConnecting ? 'Connecting...' : 'Connect Manually'}
                   </Button>
                 </div>
               )}
