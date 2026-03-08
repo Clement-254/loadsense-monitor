@@ -50,9 +50,9 @@ export default function DeviceScreen({ settings, updateSettings, isRunning }: Pr
     setBluetoothDevices([]);
 
     // Check if Web Bluetooth API is available
-    if (navigator.bluetooth) {
+    if ('bluetooth' in navigator) {
       try {
-        const device = await navigator.bluetooth.requestDevice({
+        const device = await (navigator as any).bluetooth.requestDevice({
           acceptAllDevices: true,
           optionalServices: ['generic_access', 'battery_service'],
         });
