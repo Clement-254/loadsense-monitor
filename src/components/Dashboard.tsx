@@ -33,6 +33,7 @@ export default function Dashboard({ latestReading, liveData, isRunning, onStart,
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-foreground">SLMRS</h1>
+          <p className="text-[10px] text-muted-foreground">Smart Load Monitoring and Reporting System</p>
           <p className="text-xs text-muted-foreground">{settings.deviceName}</p>
         </div>
         <div className="flex items-center gap-2">
